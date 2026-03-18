@@ -6,136 +6,80 @@ const express = require("express");
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const app = express();
 
-// ===== DATA =====
-const vipUsers = new Set();
+// ===== MEMORY =====
 const memory = {};
-const scores = {};
 
-const OWNER_ID = Number(process.env.OWNER_ID);
+// ===== SAVE MEMORY =====
+function saveMemory(userId, msg) {
+  if (!memory[userId]) memory[userId] = [];
+  memory[userId].push(msg);
 
-// ===== FUNCTIONS =====
-function isOwner(ctx) {
-  return ctx.from.id === OWNER_ID;
+  if (memory[userId].length > 5) {
+    memory[userId].shift();
+  }
 }
 
-// 🎯 SMART REPLY SYSTEM
+// ===== SMART REPLY SYSTEM =====
 function shouldReply(ctx) {
-  const msg = ctx.message;
+  const msg = ctx.message.text;
 
-  if (!msg.text) return false;
+  if (!msg) return false;
 
-  // always reply if mentioned
-  if (msg.text.includes(`@${ctx.botInfo.username}`)) return true;
+  // ignore commands
+  if (msg.startsWith("/")) return false;
 
-  // reply if replying to bot
-  if (
-    msg.reply_to_message &&
-    msg.reply_to_message.from.username === ctx.botInfo.username
-  ) {
-    return true;
-  }
+  // avoid too short / too long
+  if (msg.length < 3 || msg.length > 200) return false;
 
-  // random replies (20%)
-  if (Math.random() < 0.2) return true;
-
-  return false;
-}
-
-function addScore(id) {
-  if (!scores[id]) scores[id] = 0;
-  scores[id]++;
-}
-
-function saveMemory(id, msg) {
-  if (!memory[id]) memory[id] = [];
-  memory[id].push(msg);
-
-  if (memory[id].length > 5) {
-    memory[id].shift();
-  }
+  // random reply chance (30%)
+  return Math.random() < 0.3;
 }
 
 // ===== AI FUNCTION =====
 async function getAIReply(message, userId) {
   const history = memory[userId]?.join(" | ") || "none";
 
-  try {
-    const res = await axios.post(
-      process.env.AI_API,
-      {
-        model: "meta-llama/llama-3-8b-instruct",
-        messages: [
-          {
-            role: "system",
-            content: `
+  const res = await axios.post(
+    process.env.AI_API,
+    {
+      model: "openchat/openchat-3.5",
+      messages: [
+        {
+          role: "system",
+          content: `
 You are a Sri Lankan meme bot.
 
 User history: ${history}
 
 Style:
-- Sinhala + English mix
-- Very funny, short replies (max 10 words)
+- Sinhala + English mix (Singlish)
+- Very funny, savage, Gen Z
+- Short replies (max 8 words)
+
+Rules:
+- Always be funny
+- Light roast allowed
 - Use slang: bn, aiyo, mokada, hari hari
-- Sometimes roast users
-- Be unpredictable and fun
+- Sound like real WhatsApp friend
+- Never be boring
 `
-          },
-          {
-            role: "user",
-            content: message
-          }
-        ]
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.AI_KEY}`,
-          "Content-Type": "application/json"
+        },
+        {
+          role: "user",
+          content: message
         }
+      ]
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.AI_KEY}`,
+        "Content-Type": "application/json"
       }
-    );
+    }
+  );
 
-    return res.data.choices[0].message.content;
-  } catch (err) {
-    console.error("AI Error:", err.message);
-    return "aiyo brain lag una 😂";
-  }
+  return res.data.choices[0].message.content;
 }
-
-// ===== COMMANDS =====
-
-// start
-bot.start((ctx) => {
-  ctx.reply("🔥 Meme Bot Active... mention karala katha karapan 😏");
-});
-
-// VIP info
-bot.command("vip", (ctx) => {
-  ctx.reply("💎 VIP Rs.300/month\nPay & send screenshot 😏");
-});
-
-// add VIP (owner only)
-bot.command("addvip", (ctx) => {
-  if (!isOwner(ctx)) return;
-
-  const id = ctx.message.text.split(" ")[1];
-  vipUsers.add(Number(id));
-
-  ctx.reply("🔥 VIP added");
-});
-
-// leaderboard
-bot.command("top", (ctx) => {
-  const sorted = Object.entries(scores)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
-
-  let text = "🔥 Top Users:\n";
-  sorted.forEach(([id, score], i) => {
-    text += `${i + 1}. ${score} points\n`;
-  });
-
-  ctx.reply(text);
-});
 
 // ===== MAIN BOT =====
 bot.on("text", async (ctx) => {
@@ -145,19 +89,17 @@ bot.on("text", async (ctx) => {
     const msg = ctx.message.text;
     const userId = ctx.from.id;
 
-    const isVIP = vipUsers.has(userId);
-
-    // VIP gets more replies
-    if (!isVIP && Math.random() > 0.6) return;
-
-    // save memory + score
     saveMemory(userId, msg);
-    addScore(userId);
 
-    // delay (human feel)
+    // small delay (human feel)
     await new Promise((r) =>
-      setTimeout(r, 1000 + Math.random() * 2000)
+      setTimeout(r, 500 + Math.random() * 1000)
     );
+
+    // chaos mode (10%)
+    if (Math.random() < 0.1) {
+      return ctx.reply("mokakda bn me chat eka 💀");
+    }
 
     const reply = await getAIReply(msg, userId);
 
@@ -168,16 +110,16 @@ bot.on("text", async (ctx) => {
 
     ctx.reply(reply);
   } catch (err) {
-    console.error("BOT ERROR:", err.message);
+    console.log("Error:", err.message);
   }
 });
 
 // ===== START BOT =====
-bot.launch()
-  .then(() => console.log("🔥 Meme Bot Running..."))
-  .catch((err) => console.error("Launch Error:", err));
+bot.launch().then(() => {
+  console.log("🔥 AI Meme Bot Running...");
+});
 
-// ===== KEEP ALIVE WEB SERVER (HEROKU FIX) =====
+// ===== HEROKU FIX (WEB SERVER) =====
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
@@ -185,5 +127,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🌐 Web server running on port ${PORT}`);
+  console.log(`🌐 Server running on port ${PORT}`);
 });
