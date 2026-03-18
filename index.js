@@ -18,7 +18,7 @@ function isOwner(ctx) {
   return ctx.from.id === OWNER_ID;
 }
 
-// 🎯 SMART REPLY SYSTEM (UPDATED 🔥)
+// 🎯 SMART REPLY SYSTEM
 function shouldReply(ctx) {
   const msg = ctx.message;
 
@@ -88,7 +88,7 @@ Style:
       },
       {
         headers: {
-          Authorization: \`Bearer \${process.env.AI_KEY}\`,
+          Authorization: `Bearer ${process.env.AI_KEY}`,
           "Content-Type": "application/json"
         }
       }
@@ -96,6 +96,7 @@ Style:
 
     return res.data.choices[0].message.content;
   } catch (err) {
+    console.error("AI Error:", err.message);
     return "aiyo brain lag una 😂";
   }
 }
@@ -130,7 +131,7 @@ bot.command("top", (ctx) => {
 
   let text = "🔥 Top Users:\n";
   sorted.forEach(([id, score], i) => {
-    text += \`\${i + 1}. \${score} points\n\`;
+    text += `${i + 1}. ${score} points\n`;
   });
 
   ctx.reply(text);
@@ -138,44 +139,51 @@ bot.command("top", (ctx) => {
 
 // ===== MAIN BOT =====
 bot.on("text", async (ctx) => {
-  if (!shouldReply(ctx)) return;
+  try {
+    if (!shouldReply(ctx)) return;
 
-  const msg = ctx.message.text;
-  const userId = ctx.from.id;
+    const msg = ctx.message.text;
+    const userId = ctx.from.id;
 
-  const isVIP = vipUsers.has(userId);
+    const isVIP = vipUsers.has(userId);
 
-  // VIP gets more replies
-  if (!isVIP && Math.random() > 0.6) return;
+    // VIP gets more replies
+    if (!isVIP && Math.random() > 0.6) return;
 
-  // save memory + score
-  saveMemory(userId, msg);
-  addScore(userId);
+    // save memory + score
+    saveMemory(userId, msg);
+    addScore(userId);
 
-  // delay (human feel)
-  await new Promise((r) =>
-    setTimeout(r, 1000 + Math.random() * 2000)
-  );
+    // delay (human feel)
+    await new Promise((r) =>
+      setTimeout(r, 1000 + Math.random() * 2000)
+    );
 
-  const reply = await getAIReply(msg, userId);
+    const reply = await getAIReply(msg, userId);
 
-  // sometimes mention name
-  if (Math.random() < 0.3) {
-    return ctx.reply(\`\${ctx.from.first_name} \${reply}\`);
+    // sometimes mention name
+    if (Math.random() < 0.3) {
+      return ctx.reply(`${ctx.from.first_name} ${reply}`);
+    }
+
+    ctx.reply(reply);
+  } catch (err) {
+    console.error("BOT ERROR:", err.message);
   }
-
-  ctx.reply(reply);
 });
 
 // ===== START BOT =====
-bot.launch();
-console.log("🔥 Meme Bot Running...");
+bot.launch()
+  .then(() => console.log("🔥 Meme Bot Running..."))
+  .catch((err) => console.error("Launch Error:", err));
 
-// ===== DASHBOARD =====
+// ===== KEEP ALIVE WEB SERVER (HEROKU FIX) =====
+const PORT = process.env.PORT || 3000;
+
 app.get("/", (req, res) => {
   res.send("Bot is running 😏");
 });
 
-app.listen(3000, () => {
-  console.log("🌐 Dashboard running on port 3000");
+app.listen(PORT, () => {
+  console.log(`🌐 Web server running on port ${PORT}`);
 });
